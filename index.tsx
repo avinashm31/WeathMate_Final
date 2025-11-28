@@ -32,7 +32,8 @@ import {
   Mail,
   User,
   LogIn,
-  Search
+  Search,
+  KeyRound
 } from 'lucide-react';
 
 // --- Configuration & Constants ---
@@ -1031,7 +1032,7 @@ const LandingPage = ({ onGetStarted }: { onGetStarted: () => void }) => {
 
 
 // --- AUTH COMPONENTS ---
-type AuthMode = 'LOGIN' | 'SIGNUP';
+type AuthMode = 'LOGIN' | 'SIGNUP' | 'FORGOT_PASSWORD';
 
 const AuthPage = ({ supabase, onAuthSuccess, onBack }: { supabase: any, onAuthSuccess: (p: UserProfile) => void, onBack: () => void }) => {
   const [mode, setMode] = useState<AuthMode>('LOGIN');
@@ -1047,7 +1048,13 @@ const AuthPage = ({ supabase, onAuthSuccess, onBack }: { supabase: any, onAuthSu
     setMsg('');
 
     try {
-        if (mode === 'SIGNUP') {
+        if (mode === 'FORGOT_PASSWORD') {
+             const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                 redirectTo: window.location.origin,
+             });
+             if (error) throw error;
+             setMsg("Reset link sent to your email.");
+        } else if (mode === 'SIGNUP') {
             const { data, error } = await supabase.auth.signUp({
                 email,
                 password,
@@ -1103,14 +1110,17 @@ const AuthPage = ({ supabase, onAuthSuccess, onBack }: { supabase: any, onAuthSu
             <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
                  {mode === 'LOGIN' && <Shield size={32} color="#000" />}
                  {mode === 'SIGNUP' && <User size={32} color="#000" />}
+                 {mode === 'FORGOT_PASSWORD' && <KeyRound size={32} color="#000" />}
             </div>
             <h2 style={{ ...styles.heading, fontSize: '1.8rem' }}>
                 {mode === 'LOGIN' && 'Access Vault'}
                 {mode === 'SIGNUP' && 'New Identity'}
+                {mode === 'FORGOT_PASSWORD' && 'Recovery'}
             </h2>
             <p style={styles.subtext}>
                 {mode === 'LOGIN' && 'Secure institutional access.'}
                 {mode === 'SIGNUP' && 'Create your secured ledger.'}
+                {mode === 'FORGOT_PASSWORD' && 'Recover your secured ledger.'}
             </p>
          </div>
 
@@ -1129,22 +1139,39 @@ const AuthPage = ({ supabase, onAuthSuccess, onBack }: { supabase: any, onAuthSu
             <input type="email" style={styles.input} value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="client@wealthmate.com" />
            </div>
 
-            <div style={{ marginBottom: '40px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <label style={{ display: 'block', color: '#666', fontSize: '0.8rem', letterSpacing: '1px' }}>PASSWORD</label>
+            {mode !== 'FORGOT_PASSWORD' && (
+                <div style={{ marginBottom: '40px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <label style={{ display: 'block', color: '#666', fontSize: '0.8rem', letterSpacing: '1px' }}>PASSWORD</label>
+                    </div>
+                    <input type="password" style={styles.input} value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" />
                 </div>
-                <input type="password" style={styles.input} value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" />
-            </div>
+            )}
 
            <button type="submit" style={{ ...styles.primaryBtn, width: '100%', marginBottom: '24px' }}>
-              {isLoading ? 'Processing...' : (mode === 'LOGIN' ? 'Enter Vault' : 'Initialize')}
+              {isLoading ? 'Processing...' : (
+                  mode === 'LOGIN' ? 'Enter Vault' : 
+                  mode === 'SIGNUP' ? 'Initialize' : 
+                  'Send Reset Link'
+              )}
            </button>
 
            <div style={{ textAlign: 'center', fontSize: '0.8rem', color: '#666' }}>
-               {mode === 'LOGIN' ? (
-                   <>New to WealthMate? <span onClick={() => setMode('SIGNUP')} style={{ color: '#fff', cursor: 'pointer', fontWeight: 500 }}>Create Account</span></>
-               ) : (
+               {mode === 'LOGIN' && (
+                   <>
+                       <div style={{ marginBottom: '12px' }}>
+                           New to WealthMate? <span onClick={() => setMode('SIGNUP')} style={{ color: '#fff', cursor: 'pointer', fontWeight: 500 }}>Create Account</span>
+                       </div>
+                       <div>
+                           <span onClick={() => setMode('FORGOT_PASSWORD')} style={{ color: '#888', cursor: 'pointer', fontWeight: 500 }}>Forgot Password?</span>
+                       </div>
+                   </>
+               )}
+               {mode === 'SIGNUP' && (
                    <>Already have access? <span onClick={() => setMode('LOGIN')} style={{ color: '#fff', cursor: 'pointer', fontWeight: 500 }}>Login</span></>
+               )}
+               {mode === 'FORGOT_PASSWORD' && (
+                   <span onClick={() => setMode('LOGIN')} style={{ color: '#fff', cursor: 'pointer', fontWeight: 500 }}>Back to Login</span>
                )}
            </div>
          </form>
