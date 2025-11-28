@@ -213,7 +213,7 @@ const CurvedLoop = ({ text = "WEALTHMATE ✦ ", speed = 10, radius = 800 }) => {
                     fontSize: '60px', 
                     fontFamily: 'Playfair Display', 
                     fontWeight: '900', 
-                    letterSpacing: '4px',
+                    letterSpacing: '4px', 
                     fill: GOLD_COLOR
                 }}>
                     <textPath href="#curvePath" startOffset="0%">
@@ -1032,10 +1032,10 @@ const LandingPage = ({ onGetStarted }: { onGetStarted: () => void }) => {
 
 
 // --- AUTH COMPONENTS ---
-type AuthMode = 'LOGIN' | 'SIGNUP' | 'FORGOT_PASSWORD';
+type AuthMode = 'LOGIN' | 'SIGNUP' | 'FORGOT_PASSWORD' | 'UPDATE_PASSWORD';
 
-const AuthPage = ({ supabase, onAuthSuccess, onBack }: { supabase: any, onAuthSuccess: (p: UserProfile) => void, onBack: () => void }) => {
-  const [mode, setMode] = useState<AuthMode>('LOGIN');
+const AuthPage = ({ supabase, onAuthSuccess, onBack, initialMode = 'LOGIN' }: { supabase: any, onAuthSuccess: (p: UserProfile) => void, onBack: () => void, initialMode?: AuthMode }) => {
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
@@ -1050,10 +1050,15 @@ const AuthPage = ({ supabase, onAuthSuccess, onBack }: { supabase: any, onAuthSu
     try {
         if (mode === 'FORGOT_PASSWORD') {
              const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                 redirectTo: window.location.origin,
+                 redirectTo: window.location.origin, // Redirect back to this app
              });
              if (error) throw error;
              setMsg("Reset link sent to your email.");
+        } else if (mode === 'UPDATE_PASSWORD') {
+             const { error } = await supabase.auth.updateUser({ password: password });
+             if (error) throw error;
+             setMsg("Password updated successfully. Logging you in...");
+             setTimeout(() => setMode('LOGIN'), 2000);
         } else if (mode === 'SIGNUP') {
             const { data, error } = await supabase.auth.signUp({
                 email,
@@ -1110,17 +1115,19 @@ const AuthPage = ({ supabase, onAuthSuccess, onBack }: { supabase: any, onAuthSu
             <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
                  {mode === 'LOGIN' && <Shield size={32} color="#000" />}
                  {mode === 'SIGNUP' && <User size={32} color="#000" />}
-                 {mode === 'FORGOT_PASSWORD' && <KeyRound size={32} color="#000" />}
+                 {(mode === 'FORGOT_PASSWORD' || mode === 'UPDATE_PASSWORD') && <KeyRound size={32} color="#000" />}
             </div>
             <h2 style={{ ...styles.heading, fontSize: '1.8rem' }}>
                 {mode === 'LOGIN' && 'Access Vault'}
                 {mode === 'SIGNUP' && 'New Identity'}
                 {mode === 'FORGOT_PASSWORD' && 'Recovery'}
+                {mode === 'UPDATE_PASSWORD' && 'New Security'}
             </h2>
             <p style={styles.subtext}>
                 {mode === 'LOGIN' && 'Secure institutional access.'}
                 {mode === 'SIGNUP' && 'Create your secured ledger.'}
                 {mode === 'FORGOT_PASSWORD' && 'Recover your secured ledger.'}
+                {mode === 'UPDATE_PASSWORD' && 'Set your new access code.'}
             </p>
          </div>
 
@@ -1134,15 +1141,19 @@ const AuthPage = ({ supabase, onAuthSuccess, onBack }: { supabase: any, onAuthSu
                </div>
            )}
            
-           <div style={{ marginBottom: '24px' }}>
-            <label style={{ display: 'block', color: '#666', fontSize: '0.8rem', marginBottom: '8px', letterSpacing: '1px' }}>EMAIL ADDRESS</label>
-            <input type="email" style={styles.input} value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="client@wealthmate.com" />
-           </div>
+           {mode !== 'UPDATE_PASSWORD' && (
+               <div style={{ marginBottom: '24px' }}>
+                <label style={{ display: 'block', color: '#666', fontSize: '0.8rem', marginBottom: '8px', letterSpacing: '1px' }}>EMAIL ADDRESS</label>
+                <input type="email" style={styles.input} value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="client@wealthmate.com" />
+               </div>
+           )}
 
             {mode !== 'FORGOT_PASSWORD' && (
                 <div style={{ marginBottom: '40px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <label style={{ display: 'block', color: '#666', fontSize: '0.8rem', letterSpacing: '1px' }}>PASSWORD</label>
+                        <label style={{ display: 'block', color: '#666', fontSize: '0.8rem', letterSpacing: '1px' }}>
+                            {mode === 'UPDATE_PASSWORD' ? 'NEW PASSWORD' : 'PASSWORD'}
+                        </label>
                     </div>
                     <input type="password" style={styles.input} value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" />
                 </div>
@@ -1152,6 +1163,7 @@ const AuthPage = ({ supabase, onAuthSuccess, onBack }: { supabase: any, onAuthSu
               {isLoading ? 'Processing...' : (
                   mode === 'LOGIN' ? 'Enter Vault' : 
                   mode === 'SIGNUP' ? 'Initialize' : 
+                  mode === 'UPDATE_PASSWORD' ? 'Update Password' :
                   'Send Reset Link'
               )}
            </button>
@@ -1817,11 +1829,25 @@ const App = () => {
   const [view, setView] = useState<ViewState>('LANDING');
   const [user, setUser] = useState<UserProfile | null>(null);
   const [supabase, setSupabase] = useState<any>(null);
+  const [initialAuthMode, setInitialAuthMode] = useState<AuthMode>('LOGIN');
 
   useEffect(() => {
      try {
          const client = createClient(SUPABASE_URL, SUPABASE_KEY);
          setSupabase(client);
+
+         const { data: authListener } = client.auth.onAuthStateChange((event, session) => {
+             if (event === 'PASSWORD_RECOVERY') {
+                 setInitialAuthMode('UPDATE_PASSWORD');
+                 setView('AUTH');
+             } else if (event === 'SIGNED_IN' && view === 'AUTH') {
+                 // The AuthPage handles onSuccess, so we might not need to do anything here
+                 // unless we want to auto-redirect if session is restored on reload
+             }
+         });
+
+         return () => { authListener.subscription.unsubscribe(); };
+
      } catch(e) { console.error("Supabase Init Error", e); }
   }, []);
 
@@ -1834,7 +1860,7 @@ const App = () => {
     <div style={styles.container}>
       <CoinRain />
       {view === 'LANDING' && ( <LandingPage onGetStarted={getStarted} /> )}
-      {view === 'AUTH' && supabase && ( <AuthPage supabase={supabase} onBack={() => setView('LANDING')} onAuthSuccess={(u) => { setUser(u); setView('DASHBOARD'); }} /> )}
+      {view === 'AUTH' && supabase && ( <AuthPage supabase={supabase} initialMode={initialAuthMode} onBack={() => setView('LANDING')} onAuthSuccess={(u) => { setUser(u); setView('DASHBOARD'); }} /> )}
       {view === 'DASHBOARD' && user && supabase && ( <Dashboard user={user} supabase={supabase} onLogout={() => { setUser(null); setView('LANDING'); }} /> )}
     </div>
   );
